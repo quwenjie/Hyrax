@@ -10,7 +10,7 @@ using namespace std;
 using namespace mcl::bn;
 
 
-const int MAXL=24;  // only supports even, need debug
+const int MAXL=23;  // only supports even, need debug
 ll ww[(1<<MAXL)];
 
 
@@ -31,12 +31,12 @@ int main(int argc, char *argv[])
     initPairing(mcl::BN254);
 
     int l=MAXL;
-    for(int i=0;i<(1<<l)-100;i++)
+    for(int i=0;i<(1<<l)-8;i++)
     {
         ww[i]=1ll*(rand()%10000000-5000000);
 
     }
-    for(int i=(1<<l)-50;i<(1<<l);i++)
+    for(int i=(1<<l)-12;i<(1<<l);i++)
     {
         if(i&1)
             ww[i]=1ll<<54;

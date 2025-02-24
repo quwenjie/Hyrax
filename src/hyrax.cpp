@@ -87,57 +87,6 @@ G1 perdersen_commit(G1* g,ll* f,int n,G1* W)
 }
 
 
-G1 perdersen_commit(G1* g,int* f,int n,G1* W)
-{
-    G1 ret;
-    ret.clear();
-    bool *used=new bool[COMM_OPT_MAX];
-    memset(used,0,sizeof(bool)*COMM_OPT_MAX);
-    for(int i=0;i<n;i++)
-    {
-            if(f[i]==0)
-                continue;
-            
-            if(f[i]<0)
-            {
-                W[-f[i]]-=g[i];
-                used[-f[i]]=1;
-                assert(-f[i]<COMM_OPT_MAX);
-            }
-            else
-            {
-                W[f[i]]+=g[i];
-                used[f[i]]=1;
-                assert(f[i]<COMM_OPT_MAX);
-            }
-    }
-    //t.stop("add ",false);
-    const int logn=log2(COMM_OPT_MAX)+1;
-    G1 gg[40];
-    for(int j=0;j<logn;j++)
-        gg[j].clear();
-    for(int j=1;j<COMM_OPT_MAX;j++)
-    {
-        if(used[j])
-        {
-            for(int k=0;k<logn;k++)
-            {
-                if(j&(1<<k))
-                    gg[k]+=W[j];
-            }
-            W[j].clear();
-            used[j]=0;            
-        }
-    }
-    for(int j=0;j<logn;j++)
-        ret+=gg[j]*(1<<j);
-
-    //t.stop("accu",false);
-    //t.stop("ALL: ",true);
-
-    delete []used;
-    return ret;
-}
 
 G1 perdersen_commit(G1* g,Fr* f,int n)
 {
@@ -162,20 +111,10 @@ Fr lagrange(Fr *r,int l,int k)
 void brute_force_compute_LR(Fr* L,Fr* R,Fr* r,int l)
 {
     int halfl=l/2,c=l-halfl;
-    for(int k=0;k<(1<<c);k++)
-        L[k]=lagrange(r,c,k);
     for(int k=0;k<(1<<halfl);k++)
-        R[k]=lagrange(r+c,halfl,k);
-}
-
-
-
-G1 compute_Tprime(G1* Tk,int l,Fr* R) 
-{
-    int halfl=l/2;
-    int rownum=(1<<halfl),colnum=(1<<(l-halfl));
-    G1 ret=perdersen_commit(Tk,R,rownum);
-    return ret;
+        L[k]=lagrange(r,halfl,k);
+    for(int k=0;k<(1<<c);k++)
+        R[k]=lagrange(r+halfl,c,k);
 }
 
 
@@ -246,6 +185,12 @@ Pack bullet_reduce(G1 gamma, Fr*a,Fr* x,Fr y,G1*g,G1& G,int n,bool need_free) //
 
 bool prove_dot_product(G1 comm_x, G1 comm_y, Fr* a, Fr* x,Fr y,G1*g ,G1& G,int n)  // y= <a,x> , 
 {
+    G1 base;
+    base.clear();
+    for(int i=0;i<n;i++)
+        base+=g[i]*x[i];
+    assert(base==comm_x);
+
     G1 gamma=comm_x+comm_y;
     timer blt;
     blt.start();
@@ -269,7 +214,7 @@ bool prove_dot_product(G1 comm_x, G1 comm_y, Fr* a, Fr* x,Fr y,G1*g ,G1& G,int n
 static ThreadSafeQueue<int> workerq,endq;
 
 
-void ll_commit_worker(G1*& Tk,G1*& g, ll*& row,int colnum,G1*& W)
+void ll_commit_worker(G1*& Tk,G1*& g, ll*& w,int rownum,int colnum,G1*& W)
 {
     int idx;
     while (true)
@@ -277,7 +222,10 @@ void ll_commit_worker(G1*& Tk,G1*& g, ll*& row,int colnum,G1*& W)
             bool ret=workerq.TryPop(idx);
             if(ret==false)
                 return;
-            Tk[idx]=perdersen_commit(g,row+idx*colnum,colnum,W);
+            
+            Tk[idx].clear();
+            for(int i=0;i<colnum;i++)
+                Tk[idx]+=g[i]*Fr(w[i*rownum+idx]);
             endq.Push(idx);
     }
 }
@@ -289,7 +237,6 @@ G1* prover_commit(ll* w, G1* g, int l,int thread_n) //compute Tk, int version wi
     int halfl=l/2;
     int rownum=(1<<halfl),colnum=(1<<(l-halfl));
     G1 *Tk=new G1[rownum];
-    ll* row=new ll[1<<l];
     timer t;
     t.start();
     G1** W=new G1*[thread_n];
@@ -304,7 +251,7 @@ G1* prover_commit(ll* w, G1* g, int l,int thread_n) //compute Tk, int version wi
     cout<<"gg in thread "<<endl;
     for(int i=0;i<thread_n;i++)
     {
-        thread t(ll_commit_worker,std::ref(Tk),std::ref(g),std::ref(w),colnum,std::ref(W[i])); 
+        thread t(ll_commit_worker,std::ref(Tk),std::ref(g),std::ref(w),rownum,colnum,std::ref(W[i])); 
         t.detach();
     }
     while(!workerq.Empty())
@@ -324,8 +271,6 @@ G1* prover_commit(ll* w, G1* g, int l,int thread_n) //compute Tk, int version wi
 
 Fr prover_evaluate(ll*ww ,Fr*r, int l)  // nlogn brute force 
 {
-    int halfl=l/2;
-    int rownum=(1<<halfl),colnum=(1<<(l-halfl));
     timer t(true);
     t.start();
     Fr eval=0;
@@ -344,16 +289,22 @@ void open(ll*w,Fr*r,Fr eval,G1&G,G1*g,G1*comm,int l)
     Fr*R=new Fr[colnum];
     brute_force_compute_LR(L,R,r,l);
     verf.start();
-    Fr* RT=new Fr[colnum];
-    for(int i=0;i<colnum;i++)
-        RT[i]=0;
-    for(int j=0;j<colnum;j++)
+    Fr* RT=new Fr[rownum];
     for(int i=0;i<rownum;i++)
+        RT[i]=0;
+    for(int j=0;j<rownum;j++)
+    for(int i=0;i<colnum;i++)
     {
-        if(w[j+i*colnum])
-            RT[j]+=R[i]*Fr(w[j+i*colnum]);   // mat mult  (1,row)*(row,col)=(1,col)
+        RT[j]+=R[i]*Fr(w[j+i*rownum]);   // mat mult  (1,col)*(col,row)=(1,row)
     }
-    G1 tprime=compute_Tprime(comm,l,R);
-    prove_dot_product(tprime, G*eval, L, RT,eval,g , G,colnum);
+
+    G1 tprime=perdersen_commit(comm,L,rownum); //random combine comm
+    G1 T2P=perdersen_commit(g,RT,rownum);
+    //assert(tprime==T2P);
+    Fr s=0;
+    for(int i=0;i<rownum;i++)
+        s+=L[i]*RT[i];
+    assert(s==eval);
+    prove_dot_product(T2P, G*eval, L, RT,eval,g , G,rownum);
     verf.stop("total verify :");
 }
