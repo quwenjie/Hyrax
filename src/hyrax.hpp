@@ -17,8 +17,9 @@ struct Pack
     G1 gamma;
     Fr a;
     G1 g;
-    Fr y;
     Fr x;
+    Fr y;
+    
     Pack(G1 gamm,Fr fa, G1 gg,Fr xx,Fr yy)
     {
         gamma=gamm;

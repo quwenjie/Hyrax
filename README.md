@@ -5,7 +5,11 @@ This is a polynomial commitment implementation refer to [Hyrax](https://eprint.i
 This scheme is particularly for multi-linear extension of an array.
 
 ## Usage
-You can use this polynomial commitment in this way:
+First install mcl.
+
+Then `cmake .` and `make` .
+
+Test by `./src/hyrax_time`. The Hyrax PCS here supports multi-thread commitment. You can use this polynomial commitment in the following way:
 ```C++
 //
 // Created by juzix on 2021/6/17.
@@ -54,7 +58,7 @@ int main(int argc, char *argv[])
     t.start();
 
     G1* commit=prover_commit(ww,g,l,16);  // supports pippenger and multi-thread commit
-    //ww[100]-=1;
+    
     Fr eva=prover_evaluate(ww,r,l);  // this function needs optimization
     open(ww,r,eva,G,g,commit,l);  // commit is commitment, G,g is ecc bases, l is variable num
     

@@ -154,8 +154,7 @@ Pack bullet_reduce(G1 gamma, Fr*a,Fr* x,Fr y,G1*g,G1& G,int n,bool need_free) //
     Fr c,invc;
     c.setByCSPRNG();  // step3 V choose random c
     Fr::inv(invc,c);
-    //P.stop("Bullet proof Part1 fold x dot a",false);
-    //prover verifier both comp
+
     
     G1 gamma_prime=gamma_minus1*c*c+gamma_1*invc*invc+gamma;
     Fr* aprime=new Fr[n/2];       
@@ -165,8 +164,7 @@ Pack bullet_reduce(G1 gamma, Fr*a,Fr* x,Fr y,G1*g,G1& G,int n,bool need_free) //
     for(int i=0;i<n/2;i++)
         gprime[i]=g[i]*invc+g[i+n/2]*c;
     
-    //P.stop("Bullet proof Part2 fold a & g",false);
-    //prover single compute
+
     Fr* xprime=new Fr[n/2];         
     Fr yprime;
     for(int i=0;i<n/2;i++)
@@ -183,32 +181,16 @@ Pack bullet_reduce(G1 gamma, Fr*a,Fr* x,Fr y,G1*g,G1& G,int n,bool need_free) //
     return bullet_reduce(gamma_prime,aprime,xprime,yprime,gprime,G,n/2,true);
 }   
 
-bool prove_dot_product(G1 comm_x, G1 comm_y, Fr* a, Fr* x,Fr y,G1*g ,G1& G,int n)  // y= <a,x> , 
+bool prove_dot_product(G1 comm_x, G1 comm_y, Fr* a, Fr* x,Fr y,G1*g , G1& G,int n)  // y= <a,x> , 
 {
-    G1 base;
-    base.clear();
-    for(int i=0;i<n;i++)
-        base+=g[i]*x[i];
-    assert(base==comm_x);
-
     G1 gamma=comm_x+comm_y;
     timer blt;
     blt.start();
     Pack p=bullet_reduce(gamma,a,x,y,g,G,n,false);
-    blt.stop("bullet reduce ");
     assert(p.y==p.x*p.a);
     assert(p.gamma==p.g*p.x+G*p.y);
-    if(p.y==p.x*p.a && p.gamma==p.g*p.x+G*p.y)
-    {
-        cout<<"Hyrax: All check passed!!!"<<endl;
-        return true;
-    }
-    else
-    {
-        cout<<"Hyrax check failed!"<<endl;
-        return false;
-    }
-
+    blt.stop("bullet reduce ");
+    return true;
     
 }
 static ThreadSafeQueue<int> workerq,endq;
@@ -240,15 +222,15 @@ G1* prover_commit(ll* w, G1* g, int l,int thread_n) //compute Tk, int version wi
     timer t;
     t.start();
     G1** W=new G1*[thread_n];
-    cout<<"start allocate mem "<<endl;
+
     for(int i=0;i<thread_n;i++)
         W[i]=new G1[COMM_OPT_MAX*block_num];
-    cout<<"finish allocate mem "<<endl;
+
     for(int i=0;i<thread_n;i++)
         memset(W[i],0,sizeof(G1)*COMM_OPT_MAX*block_num);
     for (u64 i = 0; i < rownum; ++i)  //work for rownum 
         workerq.Push(i);
-    cout<<"gg in thread "<<endl;
+
     for(int i=0;i<thread_n;i++)
     {
         thread t(ll_commit_worker,std::ref(Tk),std::ref(g),std::ref(w),rownum,colnum,std::ref(W[i])); 
@@ -289,22 +271,22 @@ void open(ll*w,Fr*r,Fr eval,G1&G,G1*g,G1*comm,int l)
     Fr*R=new Fr[colnum];
     brute_force_compute_LR(L,R,r,l);
     verf.start();
-    Fr* RT=new Fr[rownum];
-    for(int i=0;i<rownum;i++)
-        RT[i]=0;
+    Fr* LT=new Fr[colnum];
+    for(int i=0;i<colnum;i++)
+        LT[i]=0;
     for(int j=0;j<rownum;j++)
     for(int i=0;i<colnum;i++)
     {
-        RT[j]+=R[i]*Fr(w[j+i*rownum]);   // mat mult  (1,col)*(col,row)=(1,row)
+        LT[i]+=L[j]*Fr(w[j+i*rownum]);   // mat mult  (1,row)*(row,col)=(1,col)
     }
 
     G1 tprime=perdersen_commit(comm,L,rownum); //random combine comm
-    G1 T2P=perdersen_commit(g,RT,rownum);
+    //G1 T2P=perdersen_commit(g,LT,colnum);
     //assert(tprime==T2P);
-    Fr s=0;
-    for(int i=0;i<rownum;i++)
-        s+=L[i]*RT[i];
-    assert(s==eval);
-    prove_dot_product(T2P, G*eval, L, RT,eval,g , G,rownum);
+    //Fr s=0;
+    //for(int i=0;i<colnum;i++)
+    //    s+=R[i]*LT[i];
+    //assert(s==eval);
+    prove_dot_product(tprime, G*eval, R, LT,eval,g , G,colnum);
     verf.stop("total verify :");
 }
