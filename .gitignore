@@ -1,0 +1,14 @@
+.idea
+cmake-build-*
+output
+lib/*
+*.a
+*.cmake
+CMakeFiles/
+3rd/
+CMakeCache.txt
+src/hyrax_time
+src/*.a
+src/Makefile
+src/*.cmake
+Makefile
