@@ -108,14 +108,6 @@ Fr lagrange(Fr *r,int l,int k)
     }
     return ret;
 }
-void brute_force_compute_LR(Fr* L,Fr* R,Fr* r,int l)
-{
-    int halfl=l/2,c=l-halfl;
-    for(int k=0;k<(1<<halfl);k++)
-        L[k]=lagrange(r,halfl,k);
-    for(int k=0;k<(1<<c);k++)
-        R[k]=lagrange(r+halfl,c,k);
-}
 
 
 G1 gen_gi(G1* g,int n)
@@ -215,7 +207,6 @@ G1* prover_commit(ll* w, G1* g, int l,int thread_n) //compute Tk, int version wi
 {
     cerr<<"dog "<<thread_n<<endl;
     //w has 2^l length
-    //assert(l%2==0);
     int halfl=l/2;
     int rownum=(1<<halfl),colnum=(1<<(l-halfl));
     G1 *Tk=new G1[rownum];
@@ -250,14 +241,31 @@ G1* prover_commit(ll* w, G1* g, int l,int thread_n) //compute Tk, int version wi
 }
 
 
-
+Fr* get_eq(Fr*r, int l)
+{
+    Fr* eq=new Fr[1<<l];
+    eq[0]=1-r[0];
+    eq[1]=r[0];
+    for(int i=2;i<=l;i++)
+    {
+        for(int j=(1<<i)-1;j>=0;j--)
+        {
+            if(j&(1<<(i-1)))
+                eq[j]=eq[j-(1<<(i-1))]*r[i-1];
+            else
+                eq[j]=eq[j]*(1-r[i-1]);
+        }
+    }
+    return eq;
+}
 Fr prover_evaluate(ll*ww ,Fr*r, int l)  // nlogn brute force 
 {
     timer t(true);
     t.start();
     Fr eval=0;
+    Fr* lag=get_eq(r,l);
     for(int k=0;k<(1<<l);k++)
-        eval+=lagrange(r,l,k)*Fr(ww[k]);
+        eval+=lag[k]*Fr(ww[k]);
     t.stop("eval total ",true,false);
     return eval;
 }
@@ -267,9 +275,8 @@ void open(ll*w,Fr*r,Fr eval,G1&G,G1*g,G1*comm,int l)
     int halfl=l/2;
     int rownum=(1<<halfl),colnum=(1<<(l-halfl));
     timer verf;
-    Fr*L=new Fr[rownum];
-    Fr*R=new Fr[colnum];
-    brute_force_compute_LR(L,R,r,l);
+    Fr*L=get_eq(r,halfl);
+    Fr*R=get_eq(r+halfl,l-halfl);
     verf.start();
     Fr* LT=new Fr[colnum];
     for(int i=0;i<colnum;i++)
@@ -281,12 +288,6 @@ void open(ll*w,Fr*r,Fr eval,G1&G,G1*g,G1*comm,int l)
     }
 
     G1 tprime=perdersen_commit(comm,L,rownum); //random combine comm
-    //G1 T2P=perdersen_commit(g,LT,colnum);
-    //assert(tprime==T2P);
-    //Fr s=0;
-    //for(int i=0;i<colnum;i++)
-    //    s+=R[i]*LT[i];
-    //assert(s==eval);
     prove_dot_product(tprime, G*eval, R, LT,eval,g , G,colnum);
     verf.stop("total verify :");
 }

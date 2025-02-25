@@ -10,7 +10,7 @@ using namespace std;
 using namespace mcl::bn;
 
 
-const int MAXL=23;  // only supports even, need debug
+const int MAXL=19;  // only supports even, need debug
 ll ww[(1<<MAXL)];
 
 
